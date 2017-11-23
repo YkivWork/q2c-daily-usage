@@ -1,0 +1,121 @@
+#%RAML 1.0
+title: Usage Update API
+baseUri: http://localhost:8081/api/v1
+version: 1.0
+description: This API
+
+/usages:
+  post:
+    description: |
+       Enters the file content for an existing song entity.
+    queryParameters: 
+       usageDate: 
+         displayName: usageDate
+         description: Used to filter the results by only returning work orders since lastModified
+         example: 05-17-2017
+         required: false
+    responses:
+      200:
+        description: Returns status of the new usage load.
+        body:
+          application/json:
+            example: |
+              {
+                "success": "ok"
+              }
+      400:
+        description: When we receive an error from Aria or DS1, we will return a 400 with the error message they provide.
+        body:
+          application/json:
+            example: |
+              {
+                "error_message": "The reason it failed."
+              }
+
+/monthly-usages:
+  post:
+    description: |
+       Enters the file content for an existing song entity.
+    queryParameters: 
+       usageDate: 
+         displayName: usageDate
+         description: Used to filter the results by only returning work orders since lastModified
+         example: 05-17-2017
+         required: false
+    responses:
+      200:
+        description: Returns status of the new usage load.
+        body:
+          application/json:
+            example: |
+              {
+                "success": "ok"
+              }
+      400:
+        description: When we receive an error from Aria or DS1, we will return a 400 with the error message they provide.
+        body:
+          application/json:
+            example: |
+              {
+                "error_message": "The reason it failed."
+              }
+ 
+    
+  
+/health-check:
+  /salesforce:
+    displayName: Health_Check
+    description: Call to Return Health Of Salesforce Connections
+    get:
+      responses:
+        200:
+          body:
+            application/json:
+              example: {"Status": "OK"}
+        400:
+        500:
+          body:
+            application/json:
+              example: {"Status": "FAILURE"}
+  /aria:
+    displayName: Health_Check
+    description: Call to Return Health Of Aria Connections
+    get:
+      responses:
+        200:
+          body:
+            application/json:
+              example: {"Status": "OK"}
+        400:
+        500:
+          body:
+            application/json:
+              example: {"Status": "FAILURE"}
+  /oracle:
+    displayName: Health_Check
+    description: Call to Return Health Of Oracle Connections
+    get:
+      responses:
+        200:
+          body:
+            application/json:
+              example: {"Status": "OK"}
+        400:
+        500:
+          body:
+            application/json:
+              example: {"Status": "FAILURE"}
+  /dso:
+    displayName: Health_Check
+    description: Call to Return Health Of DSO Connections
+    get:
+      responses:
+        200:
+          body:
+            application/json:
+              example: {"Status": "OK"}
+        400:
+        500:
+          body:
+            application/json:
+              example: {"Status": "FAILURE"}

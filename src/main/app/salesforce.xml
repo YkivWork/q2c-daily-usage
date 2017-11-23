@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:sfdc="http://www.mulesoft.org/schema/mule/sfdc" xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd
+http://www.mulesoft.org/schema/mule/sfdc http://www.mulesoft.org/schema/mule/sfdc/current/mule-sfdc.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd">
+    <flow name="SF_GetBusinessUnit_Flow">
+        <sfdc:query config-ref="Salesforce__Basic_Authentication" query="SELECT Business_Unit__c,Primary_Service_Site__c,Salesforce_ProjectID__c FROM DatasiteOne_Project__c WHERE Salesforce_ProjectID__c = '#[flowVars.salesforceProjectId]'" doc:name="Salesforce Get DatasiteOne Project"/>
+        <dw:transform-message doc:name="Transform Message">
+            <dw:set-variable variableName="salesforceData"><![CDATA[%dw 1.0
+%output application/java
+---
+payload map 
+{
+	"businessUnit": upper $.Business_Unit__c,
+	"primaryServiceSite": $.Primary_Service_Site__c,
+	"teamType": "DATASITE", // well..maybe in the future, team type can be different from salesforce
+	"salesforceProjectId": $.Salesforce_ProjectID__c 
+}]]></dw:set-variable>
+        </dw:transform-message>
+        <logger message="payload: #[payload]" level="INFO" doc:name="Logger"/>
+    </flow>
+</mule>

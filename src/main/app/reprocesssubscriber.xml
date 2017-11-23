@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:schedulers="http://www.mulesoft.org/schema/mule/schedulers" xmlns:objectstore="http://www.mulesoft.org/schema/mule/objectstore"
+	xmlns:json="http://www.mulesoft.org/schema/mule/json"
+	xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata" xmlns:microsoftservicebus="http://www.mulesoft.org/schema/mule/microsoftservicebus" xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/objectstore http://www.mulesoft.org/schema/mule/objectstore/current/mule-objectstore.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd
+http://www.mulesoft.org/schema/mule/microsoftservicebus http://www.mulesoft.org/schema/mule/microsoftservicebus/current/mule-microsoftservicebus.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.mulesoft.org/schema/mule/schedulers http://www.mulesoft.org/schema/mule/schedulers/current/mule-schedulers.xsd">
+    <flow name="reprocessSubscriber" processingStrategy="synchronous">
+        <poll doc:name="Poll">
+            <schedulers:cron-scheduler expression="${reprocessing.cron.schedule}"/>
+            <processor-chain doc:name="Processor Chain">
+                <logger message="Entered_Flow=#[flow.name]  MessageId=#[message.id]" level="INFO" category="com.merrillcorp.logging.reprocesssubscriber" doc:name="Start of Flow Logger"/>
+                <objectstore:retrieve-all-keys config-ref="Reprocess_Strategy" doc:name="ObjectStore"/>
+                <set-payload value="#[payload.body]" mimeType="application/xml" doc:name="Set Payload"/>
+                <object-to-byte-array-transformer doc:name="Object to Byte Array"/>
+                <flow-ref name="callBulkUsageg2" doc:name="callBulkUsageg2"/>
+            </processor-chain>
+        </poll>
+        <logger message="Completed_Flow=#[flow.name]  MessageId=#[message.id]" level="INFO" category="com.merrillcorp.logging.reprocesssubscriber" doc:name="End of Flow Logger"/>
+    </flow>
+</mule>

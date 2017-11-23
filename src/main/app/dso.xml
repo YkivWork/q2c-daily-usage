@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd">
+    <flow name="DSO_GetMonthlyUsage">
+        <flow-ref name="getDSOAuth_Sub_Flow" doc:name="getDSOAuth_Sub_Flow"/>
+        <set-session-variable variableName="payloadBeforeUntilSuccess" value="#[payload]" doc:name="setPayloadBeforeUntillSuccess"/>
+        <until-successful maxRetries="${dso.http.max.retries}" millisBetweenRetries="${dso.http.milliSecondsBetweenRetries}" failureExpression="exception!=null &amp;&amp; (exception.causedBy(java.io.IOException) || exception.causedBy(java.net.ConnectException)  || exception.causedBy(java.net.SocketTimeoutException))" synchronous="true" doc:name="Until Successful">
+            <http:request config-ref="DSO_API_HTTP_Request_Configuration" path="${dso.api.usage.path}" method="GET" doc:name="Dso_GetUsage">
+                <http:request-builder>
+                    <http:query-param paramName="billingDay" value="#[flowVars.currentDate]"/>
+                    <http:header headerName="Authorization" value="Bearer #[flowVars.dsoToken]"/>
+                </http:request-builder>
+            </http:request>
+        </until-successful>
+        <logger message="After connecting to   https://${dso.api.host}:${dso.api.port}${dso.api.usage.path} (result payload (the first 100 chars)  is #[message.payloadAs(java.lang.String).substring(0,message.payloadAs(java.lang.String).toString().length() &gt; 11 ? 100 : 10)])" level="INFO" doc:name="Logger"/>
+    </flow>
+</mule>

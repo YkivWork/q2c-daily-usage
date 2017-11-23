@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:schedulers="http://www.mulesoft.org/schema/mule/schedulers" xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/schedulers http://www.mulesoft.org/schema/mule/schedulers/current/mule-schedulers.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+
+
+    <flow name="pollingDSODailyUsageFlow" processingStrategy="synchronous">
+        <poll doc:name="Poll">
+            <schedulers:cron-scheduler expression="0 0 6 * * ? *"/>
+            <processor-chain doc:name="Processor Chain">
+
+                <logger message="Start of Polling DS1 for New Usages " level="DEBUG" doc:name="INFO" category="com.merrillcorp.q2c"/>
+
+                 <dw:transform-message doc:name="Transform Message">
+                    <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+payload]]></dw:set-payload>
+                </dw:transform-message>
+                <enricher source="variable:dsoToken" target="variable:dsoToken1" doc:name="Message Enricher">
+                    <flow-ref name="getDSOAuth_Sub_Flow" doc:name="getDSOAuth_Sub_Flow"/>
+                </enricher>
+                <set-variable variableName="currentDate" value="#[server.dateTime.plusDays(-1).format(&quot;MM-dd-yyyy&quot;)]" doc:name="Variable"/>
+                <logger message="After getDSOAuth_Sub_Flow #[sessionVars.dsoToken]  *** Payload *** #[message.payloadAs(java.lang.String)] " level="DEBUG" doc:name="Logger" category="com.merrillcorp.q2c"/>
+
+<!--                           <dw:transform-message doc:name="DSO Message for Testing">
+                    <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+
+[
+  
+  {
+    "megabytesAdded": 3000000,
+    "totalHostedPages": 14,
+    "totalHostedMB": 99000000,
+    "billingType": "downloadOnly",
+    "pagesAdded": 14,
+    "recordDate": "2017-04-24T17:53:03.691Z",
+    "periodStart": "2017-06-01T00:00Z[UTC]",
+    "periodEnd": "2017-05-24T23:59:59.999999999Z[UTC]",
+    "projectId": "596514d8a5cca60010bfdd02"
+  }
+   ]]]></dw:set-payload>
+                </dw:transform-message>
+-->
+          <until-successful maxRetries="${dso.http.max.retries}" millisBetweenRetries="${dso.http.milliSecondsBetweenRetries}" failureExpression="exception!=null &amp;&amp; (exception.causedBy(java.io.IOException) || exception.causedBy(java.net.ConnectException)  || exception.causedBy(java.net.SocketTimeoutException))" synchronous="true" doc:name="Until Successful">                   
+         <http:request config-ref="DSO_API_HTTP_Request_Configuration" path="${dso.api.usage.path}" method="GET" doc:name="Dso_GetUsage">
+                    <http:request-builder>
+                            <http:query-param paramName="billingDay" value="#[flowVars.currentDate]"/>
+                            <http:header headerName="Authorization" value="Bearer #[flowVars.dsoToken1]"/>
+
+                    </http:request-builder>
+                </http:request>
+        </until-successful>        
+                                
+                <logger message="After Dso_GetUsage  *** Payload *** #[message.payloadAs(java.lang.String)] " level="DEBUG" doc:name="Logger" category="com.merrillcorp.q2c"/>
+                <flow-ref name="load-usagesFlow" doc:name="load-usagesFlow"/>
+
+            </processor-chain>
+        </poll>
+        <logger message="Done Polling DSO" level="INFO" doc:name="Logger"/>
+   
+    </flow>
+
+    <sub-flow name="getDSOAuth_Sub_Flow00">
+        <dw:transform-message doc:name="Transform DSO Message to get Token">
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{
+	password: p("dso.password"),
+	username: p("dso.username"),
+	client_id: p("dso.clientId"),
+	client_secret: p("dso.clientSecret"),
+	grant_type : p("dso.grantType")
+	
+}]]></dw:set-payload>
+        </dw:transform-message>
+        <set-session-variable variableName="payloadBeforeUntilSuccess"
+			value="#[payload]" doc:name="setPayloadBeforeUntillSuccess" />
+        <until-successful maxRetries="${dso.http.max.retries}" millisBetweenRetries="${dso.http.milliSecondsBetweenRetries}" failureExpression="exception!=null &amp;&amp; (exception.causedBy(java.io.IOException) || exception.causedBy(java.net.ConnectException)  || exception.causedBy(java.net.SocketTimeoutException))" synchronous="true" doc:name="Until Successful">
+            <http:request config-ref="DSO_Auth_Request_Configuration" path="${dso.auth.path}" method="POST" doc:name="Dso_GetToken">
+                <http:request-builder>
+                    <http:header headerName="Content-Type" value="application/x-www-form-urlencoded"/>
+
+                </http:request-builder>
+            </http:request>
+        </until-successful>
+
+        <logger message=" In getDSOAuth_Sub_Flow after Dso_GetToken *** Payload *** #[message.payloadAs(java.lang.String)] " level="DEBUG" doc:name="Logger" category="com.merrillcorp.q2c"/>
+        <dw:transform-message doc:name="Transform DSO Response to Java">
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+payload]]></dw:set-payload>
+        </dw:transform-message>
+        <set-variable variableName="dsoToken" value="#[payload['access_token']]" doc:name="Variable"/>
+
+        <logger message="End of flow getDSOAuth_Sub_Flow" level="DEBUG" doc:name="Logger" category="com.merrillcorp.q2c"/>
+    </sub-flow>
+    
+    <flow name="pollingDSOMonthlyUsageFlow" processingStrategy="synchronous">
+        <poll doc:name="Poll">
+            <schedulers:cron-scheduler expression="0 0 6 26 * ? *"/>
+            <processor-chain doc:name="Processor Chain">
+
+                <logger message="Start of Polling DS1 for Monthly Usages " level="DEBUG" doc:name="INFO" category="com.merrillcorp.q2c"/>
+                <set-variable variableName="currentDate" value="#[server.dateTime.plusDays(-1).format(&quot;MM-dd-yyyy&quot;)]" doc:name="Variable"/>
+                <flow-ref name="DSO_GetMonthlyUsage" doc:name="DSO_GetMonthlyUsage"/>
+                <flow-ref name="MonthlyUsagesFlow" doc:name="MonthlyUsagesFlow"/>
+
+
+            </processor-chain>
+        </poll>
+        <logger message="Done Polling DSO" level="INFO" doc:name="Logger"/>
+   
+    </flow>
+    
+
+</mule>

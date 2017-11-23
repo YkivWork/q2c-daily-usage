@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:vm="http://www.mulesoft.org/schema/mule/vm"
+      xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking"
+      xmlns:json="http://www.mulesoft.org/schema/mule/json"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd
+http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd">
+<flow name="load-usagesCallMDR" processingStrategy="synchronous">
+        <dw:transform-message doc:name="Transform Message">
+       	<dw:set-variable  variableName="messageIn" resource="classpath:dataweave/extractIncomingMessage.dwl"/>
+
+        </dw:transform-message>
+        <until-successful maxRetries="${mdr.http.max.retries}" millisBetweenRetries="${mdr.http.milliSecondsBetweenRetries}" failureExpression="exception!=null &amp;&amp; (exception.causedBy(java.io.IOException) || exception.causedBy(java.net.ConnectException)  || exception.causedBy(java.net.SocketTimeoutException))" synchronous="true" doc:name="Until Successful">
+            <http:request config-ref="MDR_HTTP_Request_Configuration" path="${mdr.crossref.path}" method="GET" doc:name="getCrossReference">
+                <http:request-builder>
+                    <http:query-param paramName="entity_type_key" value="${mdr.entity.type.key}"/>
+                    <http:query-param paramName="id_type_key" value="${mdr.id.type.key}"/>
+                    <http:query-param paramName="id_value" value="#[flowVars.messageIn.projectId]"/>
+                    <http:query-param paramName="include_deleted_cross_ref" value="${mdr.include.deleted.cross.ref}"/>
+                </http:request-builder>
+            </http:request>
+        </until-successful>
+        <json:json-to-object-transformer returnClass="java.util.List" doc:name="JSON to Object"/>
+
+        <choice doc:name="Choice">
+            <when expression="#[payload.isEmpty()]">
+                <set-session-variable variableName="notInMDR" value="#[true]" doc:name="Set notInMDR true"/>
+            </when>
+            <otherwise>
+               <set-session-variable variableName="notInMDR" value="#[false]" doc:name="Set notInMDR false"/>
+                <flow-ref name="CheckMDR_Sub_Flow" doc:name="CheckMDR_Sub_Flow"/>
+            </otherwise>
+        </choice>
+    </flow>
+        <sub-flow name="CheckMDR_Sub_Flow">
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+ 
+        <dw:transform-message doc:name="Transform Message">
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+%var ariaMPIFound = payload[?( $.IdentifierTypeKey == 'Aria_MPI' and $.EntityTypeKey == 'PROJ' )]
+---
+payload filter ($.IdentifierTypeKey == "Aria_MPI" and ($.EntityTypeKey == 'PROJ')) map {
+    ariaMPI : null when (sizeOf (ariaMPIFound default [])) < 1 otherwise $.IdentifierValue,
+    ariaAcct : null when (sizeOf (ariaMPIFound default [])) < 1 otherwise $.Qualifier1Value         
+}]]></dw:set-payload>
+        </dw:transform-message>
+
+        <logger message="End of flow CheckMDR_Sub_Flow #[flowVars.ariaAcct]  Payload: #[payload]" level="DEBUG" doc:name="Logger" category="com.merrillcorp.q2c"/>
+
+    </sub-flow>
+    <sub-flow name="MDR_Get_Salesforce_ProjectNumber_Flow">
+        <set-session-variable variableName="payloadBeforeUntillSuccess" value="#[payload]" doc:name="setPayloadBeforeUntillSuccess"/>
+        <until-successful maxRetries="${mdr.http.max.retries}" millisBetweenRetries="${mdr.http.milliSecondsBetweenRetries}" failureExpression="exception!=null &amp;&amp; (exception.causedBy(java.io.IOException) || exception.causedBy(java.net.ConnectException)  || exception.causedBy(java.net.SocketTimeoutException))" synchronous="true" doc:name="UntilSuccessfulForAccountDetails">
+            <http:request config-ref="MDR_HTTP_Request_Configuration" path="${mdr.crossref.path}" method="GET" doc:name="GetXRefFromMDRWithDS1Proj">
+                <http:request-builder>
+                    <http:query-param paramName="entity_type_key" value="PROJ"/>
+                    <http:query-param paramName="id_type_key" value="DS1_Proj"/>
+                    <http:query-param paramName="id_value" value="#[flowVars.oneDsoMonthlyUsage.projectId]"/>
+                    <http:query-param paramName="include_deleted_cross_ref" value="0"/>
+                    <http:header headerName="Proxy-Authorization" value="Basic Y2dvcnNoaTpNaW5pb24qMDIK"/>
+
+                </http:request-builder>
+                <http:success-status-code-validator values="0..599"/>
+            </http:request>
+        </until-successful>
+        <dw:transform-message doc:name="ExtractSalesForceProjectNumber">
+            <dw:set-variable variableName="salesforceProjectId"><![CDATA[%output application/java
+%var SalesforceFound = payload[?( $.IdentifierTypeKey == 'SF_Proj' and $.EntityTypeKey == 'PROJ' )][0]
+---
+null when (sizeOf (SalesforceFound default [])) < 1 otherwise SalesforceFound.IdentifierValue
+
+
+]]></dw:set-variable>
+        </dw:transform-message>
+        <logger message="End MDR_Get_Salesforce_ProjectNumber_Flow" level="INFO" doc:name="Copy_of_INFO" category="com.merrillcorp.q2c"/>
+    </sub-flow>
+
+    
+</mule>

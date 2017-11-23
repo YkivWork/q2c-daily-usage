@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  	xmlns:mock="http://www.mulesoft.org/schema/mule/mock" 
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+	xmlns="http://www.mulesoft.org/schema/mule/core" 
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/mock http://www.mulesoft.org/schema/mule/mock/current/mule-mock.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd">
+    <munit:config name="munit" doc:name="MUnit configuration"/>
+    <spring:beans>
+        <spring:import resource="classpath:globals.xml"/>
+        <spring:import resource="classpath:aria.xml"/>
+    </spring:beans>
+    <munit:test name="call-bulk-usage-testTest" description="MUnit Test">
+        <mock:when messageProcessor="http:request" doc:name="Mock">
+            <mock:then-return payload="#[getResource('examples/ariaBulkUsageResponse.xml').asString()]" mimeType="application/xml"/>
+        </mock:when>
+        <dw:transform-message doc:name="Transform Message">
+            
+            <dw:set-session-variable variableName="usageRecords"><![CDATA[%dw 1.0
+%output application/java
+---
+[
+{
+	acct_no: "1805504",
+	master_plan_instance_no: "2494086",
+	client_master_plan_instance_id: "2494086",
+	plan_instance_no: "2494089",
+	client_plan_instance_id: "2494089",
+	usage_units: 5,
+	usage_date: "2017-07-04",
+	usage_type_code: "MBs Uploaded"
+}
+]]]></dw:set-session-variable>
+        </dw:transform-message>
+        <flow-ref name="callBulkUsage" doc:name="callBulkUsage"/>
+        <munit:assert-on-equals message="Error in Bulk Usage Response" expectedValue="#[&quot;OK&quot;]" actualValue="#[flowVars.usageErrorMsg.errorMsg]" doc:name="Assert Equals"/>
+
+    </munit:test>
+    
+</mule>

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  	xmlns:mock="http://www.mulesoft.org/schema/mule/mock" 
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+	xmlns="http://www.mulesoft.org/schema/mule/core" 
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/mock http://www.mulesoft.org/schema/mule/mock/current/mule-mock.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd">
+    <munit:config name="munit" doc:name="MUnit configuration"/>
+    <spring:beans>
+        <spring:import resource="classpath:globals.xml"/>
+        <spring:import resource="classpath:aria.xml"/>
+    </spring:beans>
+    <munit:test name="download-only-suspended-testTest" description="MUnit Test">
+        <dw:transform-message doc:name="Transform Message">
+            <dw:set-variable variableName="ariaResponse"><![CDATA[%dw 1.0
+%output application/java
+---
+{
+	projectPhase: "Suspended",
+	activeDate: "2017-07-11",
+	SpecialMediaPIN: "PIN1",
+	SpecialMediaCPII: "CPII1",
+	SMHostedPIN: "HOSTEDPIN1",
+	SMHostedCPII: "HOSTEDCPII1"
+}]]></dw:set-variable>
+        </dw:transform-message>
+        <dw:transform-message doc:name="Transform Message">
+            <dw:set-variable variableName="aria"><![CDATA[%dw 1.0
+%output application/java
+---
+{
+	ariaMPI: "MPI1",
+	ariaAcct: "A19"
+}]]></dw:set-variable>
+        </dw:transform-message>
+        <dw:transform-message doc:name="Transform Message">
+            <dw:set-variable variableName="messageIn"><![CDATA[%dw 1.0
+%output application/java
+---
+{
+	periodStart: "2017-07-11",
+	totalHostedMB: 2000
+}]]></dw:set-variable>
+        </dw:transform-message>
+        <set-session-variable variableName="comparePeriodStart" value="#[&quot;2017-07-11&quot;]" doc:name="Session Variable"/>
+        <set-session-variable variableName="usageRecords" value="#[[]]" mimeType="application/java" doc:name="Session Variable"/>
+        <flow-ref name="loadAriaDownloadOnly" doc:name="loadAriaDownloadOnly"/>
+        <munit:assert-on-equals message="Usage_units not 0" expectedValue="#[0]" actualValue="#[usageRecords[0].usage_units]" doc:name="Assert Equals"/>
+    </munit:test>
+    
+</mule>

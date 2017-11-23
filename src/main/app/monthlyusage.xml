@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw"
+      xmlns:vm="http://www.mulesoft.org/schema/mule/vm"
+      xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd">
+    <flow name="MonthlyUsagesFlow">
+        <logger message="Start MonthlyUsageFlow - message: #[message]" level="DEBUG" category="com.merrillcorp.q2c" doc:name="Logger"/>
+        <logger message="MonthlyUsageFlow - payload after DSO call (the first 100 chars): #[message.payloadAs(java.lang.String).substring(0,message.payloadAs(java.lang.String).toString().length() &gt; 11 ? 100 : 10)]" level="INFO" category="com.merrillcorp.q2c" doc:name="Payload Log"/>
+        <set-variable variableName="usages" value="#[[]]" doc:name="usages"/>
+
+        <dw:transform-message doc:name="Transform Message">
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+payload]]></dw:set-payload>
+        </dw:transform-message>
+        <foreach collection="#[payload]" doc:name="For Each">
+            <dw:transform-message doc:name="Transform Message">
+                <dw:set-variable variableName="oneDsoJson"><![CDATA[%dw 1.0
+%output application/json
+---
+payload]]></dw:set-variable>
+            </dw:transform-message>
+            <logger message="MonthlyUsageFlow - oneDsoJson: #[flowVars.oneDsoJson]" level="INFO" doc:name="Logger" category="com.merrillcorp.q2c"/>
+            <dw:transform-message doc:name="extractOneDsoResponse">
+                <dw:set-variable resource="classpath:dataweave/extractDsoResponse.dwl" variableName="oneDsoMonthlyUsage"/>
+            </dw:transform-message>
+            <flow-ref name="MDR_Get_Salesforce_ProjectNumber_Flow" doc:name="MDR_Get_Salesforce_ProjectNumber_Flow"/>
+            <choice doc:name="Choice">
+                <when expression="#[flowVars.salesforceProjectId != null]">
+                    <flow-ref name="SF_GetBusinessUnit_Flow" doc:name="SF_GetBusinessUnit_Flow"/>
+                    <choice doc:name="Choice">
+                        <when expression="#[flowVars.salesforceData.size()&gt;0]">
+                            <set-payload value="#[['businessUnit':flowVars.salesforceData[0].businessUnit,'serviceSite':flowVars.salesforceData[0].primaryServiceSite,'teamType':flowVars.salesforceData[0].teamType]]" doc:name="Set Payload"/>
+
+                            <flow-ref name="getExpenditureId" doc:name="getExpenditureId"/>
+
+                            <dw:transform-message doc:name="Transform Message">
+                                <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+%type mbformat = :string { format: "##.####"} 
+%var MBCONVERSION=1048576
+---
+{
+sfdcProjectId: flowVars.salesforceProjectId,
+lineId: "$(flowVars.salesforceProjectId)|$(flowVars.oneDsoMonthlyUsage.transactionDate)|$(flowVars.oneDsoMonthlyUsage.billingType)",
+usageBillingType: flowVars.oneDsoMonthlyUsage.billingType,
+expenditureId: payload.expenditureId,
+transactionDate: flowVars.oneDsoMonthlyUsage.transactionDate,
+quantity: ((flowVars.oneDsoMonthlyUsage.totalHostedMB as :number) / MBCONVERSION) as :mbformat when flowVars.oneDsoMonthlyUsage.billingType == "downloadOnly"
+	otherwise flowVars.oneDsoMonthlyUsage.totalHostedPages
+}]]></dw:set-payload>
+                            </dw:transform-message>
+                            <expression-component doc:name="Expression"><![CDATA[flowVars.usages.add(payload);]]></expression-component>
+
+                        </when>
+                        <otherwise>
+                            <logger message="Can't not in salesforce: SFProjectId:  #[flowVars.salesforceProjectId] - DS1 Project Id: #[flowVars.oneDsoMonthlyUsage.projectId]" level="INFO" category="com.merrillcorp.q2c" doc:name="Logger"/>
+                        </otherwise>
+                    </choice>
+
+                </when>
+                <otherwise>
+                    <logger level="INFO" doc:name="Logger1" category="com.merrillcorp.q2c" message="Project Id: #[flowVars.oneDsoMonthlyUsage.projectId] not found in MDR"/>
+                </otherwise>
+            </choice>
+            <logger level="INFO" doc:name="Logger"/>
+
+        </foreach>
+        <flow-ref name="sendMonthlyUsageToOracleFlow" doc:name="sendMonthlyUsageToOracleFlow"/>
+        <logger message="after looping" level="INFO" doc:name="Logger"/>
+    </flow>
+</mule>

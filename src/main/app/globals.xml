@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule 
+    xmlns:tcp="http://www.mulesoft.org/schema/mule/tcp" 
+    xmlns:secure-property-placeholder="http://www.mulesoft.org/schema/mule/secure-property-placeholder" 
+    xmlns:sfdc="http://www.mulesoft.org/schema/mule/sfdc" 
+    xmlns:microsoftservicebus="http://www.mulesoft.org/schema/mule/microsoftservicebus" 
+    xmlns:objectstore="http://www.mulesoft.org/schema/mule/objectstore" 
+    xmlns:vm="http://www.mulesoft.org/schema/mule/vm" 
+    xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" 
+    xmlns:apikit="http://www.mulesoft.org/schema/mule/apikit" 
+    xmlns:validation="http://www.mulesoft.org/schema/mule/validation" 
+    xmlns:context="http://www.springframework.org/schema/context" 
+    xmlns:http="http://www.mulesoft.org/schema/mule/http" 
+    xmlns="http://www.mulesoft.org/schema/mule/core" 
+    xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" 
+    xmlns:spring="http://www.springframework.org/schema/beans" 
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/microsoftservicebus http://www.mulesoft.org/schema/mule/microsoftservicebus/current/mule-microsoftservicebus.xsd
+http://www.mulesoft.org/schema/mule/objectstore http://www.mulesoft.org/schema/mule/objectstore/current/mule-objectstore.xsd
+http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/apikit http://www.mulesoft.org/schema/mule/apikit/current/mule-apikit.xsd
+http://www.mulesoft.org/schema/mule/sfdc http://www.mulesoft.org/schema/mule/sfdc/current/mule-sfdc.xsd
+http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mule/validation/current/mule-validation.xsd
+http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-current.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/secure-property-placeholder http://www.mulesoft.org/schema/mule/secure-property-placeholder/current/mule-secure-property-placeholder.xsd
+http://www.mulesoft.org/schema/mule/tcp http://www.mulesoft.org/schema/mule/tcp/current/mule-tcp.xsd">
+    <secure-property-placeholder:config name="Secure_Property_Placeholder" key="${runtime.key}" location="common.properties,hc-${mule.env}.properties,${mule.env}.properties" doc:name="Secure Property Placeholder"/>
+    <vm:connector name="VM_IN_MEMORY" validateConnections="true" doc:name="VM">
+        <vm:queue-profile>
+            <default-in-memory-queue-store/>
+        </vm:queue-profile>
+    </vm:connector>
+    <ee:object-store-caching-strategy entryTTL="5000000" name="ExpirableCachingStrategy" doc:name="Caching Strategy" />
+    <objectstore:config partition="expenditurePartition" name="nonPersistentObjectStoreConfig" doc:name="ObjectStore: Connector"></objectstore:config>
+    <objectstore:config name="Reprocess_Strategy" partition="reprocessErrors" doc:name="ObjectStore: Connector"></objectstore:config>
+    <sfdc:config name="Salesforce__Basic_Authentication" username="${sfdc.username}" password="${sfdc.password}" securityToken="${sfdc.securityToken}" url="${sfdc.url}" doc:name="Salesforce" doc:description="SFDC Instance">
+        <reconnect-forever frequency="5000" blocking="false"/>
+    </sfdc:config>
+    <http:listener-config name="api-httpListenerConfig" host="0.0.0.0" port="${http.port}" doc:name="HTTP Listener Configuration" />
+    <apikit:config name="api-config" raml="api.raml" consoleEnabled="false" doc:name="Router" />
+    <http:request-config name="ariaSystemRequestConfiguration" host="${aria.host}" port="${aria.port}" basePath="/" doc:name="ariaSystemRequestConfiguration" protocol="HTTPS" responseTimeout="120000"></http:request-config>
+    <http:request-config name="mdrSystemRequestConfiguration" host="${mdr.system.host}" port="${mdr.system.port}" basePath="/" doc:name="mdrSystemRequestConfiguration"></http:request-config>
+    <http:request-config name="MDR_HTTP_Request_Configuration" host="${mdr.system.host}" port="${mdr.system.port}" basePath="/" doc:name="HTTP Request Configuration"/>
+    <http:request-config name="oracleSysHttpRequestConfiguration" host="${oracle.sys.host}" port="${oracle.sys.port}" basePath="/" protocol="HTTPS" doc:name="HTTP Request Configuration" responseTimeout="${response.timeout}"/>
+    <http:request-config name="DSO_Auth_Request_Configuration" protocol="HTTPS" host="${dso.auth.host}" port="${dso.auth.port}" basePath="/" doc:name="HTTP Request Configuration" />
+    <http:request-config name="DSO_API_HTTP_Request_Configuration" protocol="HTTPS" host="${dso.api.host}" port="${dso.api.port}" doc:name="HTTP Request Configuration"/>
+    <http:request-config name="UX_SFDC_HTTP_Request_Configuration" host="${ux.sfdc.host}" port="${ux.sfdc.port}" doc:name="HTTP Request Configuration"/>
+</mule>

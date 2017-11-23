@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw"
+      xmlns:mock="http://www.mulesoft.org/schema/mule/mock"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:spring="http://www.springframework.org/schema/beans"
+      xmlns:core="http://www.mulesoft.org/schema/mule/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xsi:schemaLocation="http://www.mulesoft.org/schema/mule/mock http://www.mulesoft.org/schema/mule/mock/current/mule-mock.xsd
+http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd">
+    <munit:config name="munit" doc:name="MUnit configuration"/>
+    <spring:beans>
+        <spring:import resource="classpath:globals.xml"/>
+        <spring:import resource="classpath:load-usages.xml"/>
+        <spring:import resource="classpath:aria.xml"/>
+        <spring:import resource="classpath:dso.xml"/>
+        <spring:import resource="classpath:dsoauth.xml"/>
+        <spring:import resource="classpath:mdr.xml"/>
+    </spring:beans>
+
+    <munit:test name="aria-timeout-test-getAriaDataTest" description="Test">
+        <mock:when messageProcessor="http:request" doc:name="Mock">
+            <mock:then-return payload="#[getResource('examples/ariaAccountPlan-multipleMPI.xml').asString()]" mimeType="application/xml"/>
+        </mock:when>
+
+        <set-variable variableName="aria" value="#[['ariaAcct':'1781616']]"/>
+
+        <flow-ref name="getAriaData" doc:name="getAriaData"/>
+        <munit:assert-on-equals message="Invalid Error Message Response" expectedValue="#[&quot;OK&quot;]" actualValue="#[ariaResponse.errorMsg]" doc:name="Assert Equals"/>
+    </munit:test>
+</mule>

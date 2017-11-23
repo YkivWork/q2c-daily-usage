@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd">
+    <http:request-config name="Project_System_Newly_Active_HTTP" host="${project.system.host}" port="${project.system.port}" doc:name="HTTP Request Configuration" basePath="/">
+
+    </http:request-config>
+   
+    <flow name="load-usagesFlow">
+        <set-variable variableName="currentDate" value="#[server.dateTime.plusDays(-1).format(&quot;MM-dd-yyyy&quot;)]" doc:name="Variable"/>
+        <flow-ref name="processDSODataSub_Flow" doc:name="processDSODataSub_Flow"/>
+
+        <logger message="After processDSODataSub_Flow #[message.payloadAs(java.lang.String)]" level="DEBUG" doc:name="[DEBUG]Log Payload" category="com.merrillcorp.q2c"/>
+    </flow>
+    <flow name="console-load-usagesFlow">
+        <set-payload value="#[message.inboundProperties.'http.query.params']" doc:name="Set Payload"/>
+        <dw:transform-message doc:name="Transform Message">
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+%function dateFormat(value) value as :date {format: "MM-dd-yyyy"} as :string {format: "MM-dd-yyyy"}
+---
+{
+	convertdate: dateFormat(payload.usageDate)
+}]]></dw:set-payload>
+        </dw:transform-message>
+        <set-variable variableName="currentDate" value="#[payload.convertdate]" doc:name="Variable"/>
+        <enricher source="variable:dsoToken" target="variable:dsoToken1" doc:name="Message Enricher">
+            <flow-ref name="getDSOAuth_Sub_Flow" doc:name="getDSOAuth_Sub_Flow"/>
+        </enricher>
+        
+          <until-successful maxRetries="${dso.http.max.retries}" millisBetweenRetries="${dso.http.milliSecondsBetweenRetries}" failureExpression="exception!=null &amp;&amp; (exception.causedBy(java.io.IOException) || exception.causedBy(java.net.ConnectException)  || exception.causedBy(java.net.SocketTimeoutException))" synchronous="true" doc:name="Until Successful">
+          <http:request config-ref="DSO_API_HTTP_Request_Configuration" path="${dso.api.usage.path}" method="GET" doc:name="get DSO Usage">
+            <http:request-builder>
+                <http:query-param paramName="billingDay" value="#[flowVars.currentDate]"/>
+                <http:header headerName="Authorization" value="Bearer #[flowVars.dsoToken1]"/>
+            </http:request-builder>
+          </http:request>
+        </until-successful>
+        <byte-array-to-object-transformer doc:name="Byte Array to Object"/>
+        <async doc:name="Async">
+            <flow-ref name="processDSODataSub_Flow" doc:name="processDSODataSub_Flow"/>
+        </async>
+     
+<!--          <dw:transform-message doc:name="DSO Message for Testing">
+                    <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+
+[
+  
+  {
+    "megabytesAdded": 3000000,
+    "totalHostedPages": 14,
+    "totalHostedMB": 99000000,
+    "billingType": "downloadOnly",
+    "pagesAdded": 14,
+    "recordDate": "2017-04-24T17:53:03.691Z",
+    "periodStart": "2017-06-01T00:00Z[UTC]",
+    "periodEnd": "2017-05-24T23:59:59.999999999Z[UTC]",
+    "projectId": "596514d8a5cca60010bfdd02"
+  }
+   ]]]></dw:set-payload>
+                </dw:transform-message>
+-->
+        <logger message="End of console-load-usagesFlow" level="DEBUG" category="com.merrillcorp.q2c" doc:name="[DEBUG]Log Payload"/>
+    </flow>
+    <sub-flow name="processDSODataSub_Flow">
+        <dw:transform-message doc:name="Transform Payload to Java">
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+payload]]></dw:set-payload>
+        </dw:transform-message>
+        <set-session-variable variableName="usageRecords" value="#[[]]" mimeType="application/java" doc:name="Session Variable"/>
+        <foreach collection="#[payload]" doc:name="For Each">
+            <processor-chain doc:name="Processor Chain">
+                <dw:transform-message doc:name="Set Variable dsoRecord with DS1 Input">
+                    <dw:set-variable variableName="dsoRecord"><![CDATA[%dw 1.0
+%output application/java
+---
+payload]]></dw:set-variable>
+                </dw:transform-message>
+                <dw:transform-message doc:name="Set comparePeriodStart">
+                <dw:set-session-variable variableName="comparePeriodStart" resource="classpath:dataweave/setcomparePeriodStart.dwl"><![CDATA[%dw 1.0
+%output application/java
+---
+{
+}]]></dw:set-session-variable>
+                    
+                </dw:transform-message>
+                <logger message="logger after populating dsoRecord #[message.payloadAs(java.lang.String)]" level="DEBUG" doc:name="Logger" category="com.merrillcorp.q2c"/>
+                <flow-ref name="load-usagesCallMDR" doc:name="load-usagesCallMDR"/>
+                <choice doc:name="Choice">
+                    <when expression="#[sessionVars.notInMDR == &quot;true&quot;]">
+                       <logger message="Project Id: #[flowVars.dsoRecord.projectId] not found in MDR" level="DEBUG" doc:name="Log Error for Not Found in MDR" category="com.merrillcorp.q2c"/>
+                    </when>
+                    <when expression="#[dsoRecord.billingType == ${dsoRecord.billingType.downloadOnly}]">
+                        <logger message="DownloadOnly Branch of the Choice" level="DEBUG" doc:name="Logger" category="com.merrillcorp.q2c"/>
+                        <foreach doc:name="For Each">
+                            <logger message="The payload for this loop: #[message.payloadAs(java.lang.String)]" level="DEBUG" category="com.merrillcorp.q2c" doc:name="Logger"/>
+                            <set-variable variableName="aria" value="#[payload]" doc:name="Variable"/>
+                            <flow-ref name="getAriaData" doc:name="getAriaData"/>
+                            <flow-ref name="loadAriaDownloadOnly" doc:name="loadAriaDownloadOnly"/>
+                        </foreach>
+                    </when>
+                    <otherwise>
+                        <logger message="Default Branch of the Choice" level="DEBUG" doc:name="Logger" category="com.merrillcorp.q2c"/>
+                        <foreach doc:name="For Each">
+                            <logger message="The payload for this loop:  #[message.payloadAs(java.lang.String)]" level="DEBUG" category="com.merrillcorp.q2c" doc:name="Logger"/>
+                            <set-variable variableName="aria" value="#[payload]" doc:name="Variable"/>
+                            <flow-ref name="getAriaData" doc:name="getAriaData"/>
+                            <flow-ref name="loadAriaDocChoice" doc:name="loadAriaDocChoice"/>
+                        </foreach>
+                    </otherwise>
+                </choice>
+                <logger message="At the end of For Each in processDSODataSub_Flow" level="DEBUG" doc:name="Logger" category="com.merrillcorp.q2c"/>
+            </processor-chain>
+        </foreach>
+        <flow-ref name="callBulkUsage" doc:name="callBulkUsage"/>
+        <flow-ref name="callNewlyActiveProjects" doc:name="callNewlyActiveProjects"/>
+        <logger level="DEBUG" doc:name="Logger" message="End of processDSODataSub_Flow" category="com.merrillcorp.q2c"/>
+    </sub-flow>
+    <flow name="callNewlyActiveProjects">
+        <choice doc:name="Choice">
+            <when expression="#[sessionVars.pollNewlyActiveProjects == true]">
+                <logger message="Inside callNewlyActiveProjects == true and payload is #[message.payloadAs(java.lang.String)]" level="DEBUG" doc:name="[DEBUG]Log" category="com.merrillcorp.q2c"/>
+                <http:request config-ref="UX_SFDC_HTTP_Request_Configuration" path="${ux.sfdc.path}" method="POST" doc:name="HTTP Call to Newly Active Projects">
+                    <http:request-builder>
+                        <http:header headerName="Proxy-Authorization" value="Basic Y2dvcnNoaTpNaW5pb24qMDIK"/>
+
+                    </http:request-builder>
+                </http:request>
+                <logger message="After HTTP Call in callNewlyActiveProjects #[message.payloadAs(java.lang.String)]" level="INFO" doc:name="[DEBUG]Log Payload" category="com.merrillcorp.q2c"/>
+            </when>
+            <otherwise>
+                <logger message="Inside callNewlyActiveProjects == false" level="DEBUG" doc:name="[DEBUG]Log" category="com.merrillcorp.q2c"/>
+            </otherwise>
+        </choice>
+    </flow>
+
+    
+    
+    
+
+    
+    
+
+</mule>

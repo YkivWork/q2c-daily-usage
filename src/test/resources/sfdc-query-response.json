@@ -1,0 +1,76 @@
+  {
+    "activeDate": "2017-03-06",
+    "billingEffectiveDate": "2017-03-06",
+    "businessUnit": "DATASITE",
+    "closureMediaInclude": "3.0",
+    "continuationRate": "0.01",
+    "contractTerm": "5.0",
+    "countryOfIssuer": "US",
+    "createdAt": "2017-03-06T19:23:23.000Z",
+    "currency": null,
+    "effectiveDate": "2017-03-06",
+    "hibernation": "0.0",
+    "legalEntity": "Merrill Communications LLC",
+    "modifiedAt": "2017-03-16T18:41:35.000Z",
+    "name": "MS Test 23rd",
+    "operatingUnitId": "21",
+    "operatingUnitName": "US_OU-MERRILL CORPORATION",
+    "primaryServiceSite": "STP",
+    "productType": "Asset Sale",
+    "projectCreateDate": "2017-03-06",
+    "refId": "a27S0000000k4m0IAA",
+    "revenueSite": "STP",
+    "sales": "005S0000005AcLhIAK",
+    "vatRegistration": null,
+    "ariaAccountCreate": null,
+    "companies": [
+      {
+        "name": "DSOC-006",
+        "billing": {
+          "address1": "Address 1",
+          "address2": "Address 2",
+          "address3": "Address 3",
+          "city": "St Paul",
+          "country": "US",
+          "email": "abc@gmail.com",
+          "firstName": "Test",
+          "lastName": "Testson",
+          "locality": null,
+          "middleInitial": "A",
+          "name": "BA-006",
+          "oracleReference": "32123.0",
+          "phone": "(651) 651-6511",
+          "postalCode": "55101",
+          "stateProvince": "MN"
+        },
+        "billingCompany": {
+          "name": "MS Billing Co",
+          "oracleId": "27700.0"
+        }
+      },
+      {
+        "name": "DSOC-007",
+        "billing": {
+          "address1": "Address 1",
+          "address2": "Address 2",
+          "address3": "Address 3",
+          "city": "St Paul",
+          "country": "US",
+          "email": "abc@gmail.com",
+          "firstName": "Test",
+          "lastName": "Testson",
+          "locality": null,
+          "middleInitial": "A",
+          "name": "BA-006",
+          "oracleReference": "32123.0",
+          "phone": "(651) 651-6511",
+          "postalCode": "55101",
+          "stateProvince": "MN"
+        },
+        "billingCompany": {
+          "name": "MS Billing Co",
+          "oracleId": "27700.0"
+        }
+      }
+    ]
+  }

@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:objectstore="http://www.mulesoft.org/schema/mule/objectstore"
+	xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw"
+	xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/objectstore http://www.mulesoft.org/schema/mule/objectstore/current/mule-objectstore.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd">
+    <sub-flow name="callBulkUsage">
+        <logger level="INFO" doc:name="Logger"/>
+        <dw:transform-message doc:name="Aria SOAP Message Transform">
+            <dw:set-payload><![CDATA[%dw 1.0
+%input payload application/java
+%output application/xml
+%namespace soap http://schemas.xmlsoap.org/soap/envelope/
+%namespace aria urn:client:api:wsdl:document/literal_wrapped:vers:11.0:aria_complete_m_api
+%function dateOnly(value) value[0 .. 9]
+%var lactiveDate = '2199-01-01' as :date {format: "yyyy-MM-dd"} when flowVars.ariaResponse.activeDate == null otherwise flowVars.ariaResponse.activeDate as :date {format: "yyyy-MM-dd"}
+%var lstartDate = '2199-01-01' as :date {format: "yyyy-MM-dd"} when flowVars.messageIn.periodStart == null otherwise dateOnly(flowVars.messageIn.periodStart) as :date {format: "yyyy-MM-dd"}
+%var clientseq = 1000
+%function calcUnits(lprojectPhase, aDate, pDate, tHosted, tAdded) 0 when lprojectPhase == "Preparation"
+otherwise 0 when (lprojectPhase == "Active" and aDate > pDate)
+otherwise tHosted when (lprojectPhase == "Active" and aDate == pDate) 
+otherwise tAdded when (aDate < pDate and lprojectPhase == "Active")
+otherwise "Unknown Error"
+---
+{
+	soap#Envelope: {
+	  soap#Header: {},
+	  soap#Body: {
+			aria#bulk_record_usage_m: {
+				client_no: p('aria.client_no'),
+				auth_key: p('aria.auth_key'),
+				usage_recs: { (sessionVars.usageRecords map { 
+						usage_recs_row: { 
+							acct_no: $.acct_no,
+							master_plan_instance_no: $.master_plan_instance_no,
+							client_master_plan_instance_id: $.client_master_plan_instance_id,
+							plan_instance_no: $.plan_instance_no,
+							client_plan_instance_id: $.client_plan_instance_id,
+							usage_units: $.usage_units,
+							usage_date: $.usage_date,
+    					    usage_type_code: $.usage_type_code,
+						    client_record_id: clientseq + $$	
+						}
+						})
+					}
+				}
+			}
+		}
+		}
+		]]></dw:set-payload>
+        </dw:transform-message>
+        <set-variable variableName="payloadBeforeUsageCall" value="#[payload]" mimeType="application/java" doc:name="Set payloadBeforeUsageCall"/>
+        <logger message="In flow callBulkUsage #[message.payloadAs(java.lang.String)]" level="DEBUG" category="com.merrillcorp.q2c" doc:name="Logger"/>
+        <object-to-string-transformer doc:name="Object to String"/>
+        <flow-ref name="callBulkUsageg2" doc:name="callBulkUsageg2"/>
+        <logger level="INFO" doc:name="Logger"/>
+    </sub-flow>
+<flow name="loadAriaDownloadOnly" processingStrategy="synchronous">
+         
+
+        <choice doc:name="megabytesAdded Choice">
+            <when expression="#[(ariaResponse.projectPhase == ${aria.projectPhase.Preparation})  || ((ariaResponse.projectPhase == ${aria.projectPhase.Active}) &amp;&amp; (flowVars.ariaResponse.activeDate &gt; sessionVars.comparePeriodStart))]">
+                <dw:transform-message doc:name="Special Media Upload and Hosted">
+                	<dw:set-payload resource="classpath:dataweave/prepareSOAPPayloadForSpecialMediaUploadedToAria.dwl"/>
+                </dw:transform-message>
+                <foreach doc:name="For Each" collection="payload">
+                    <expression-transformer expression="#[sessionVars['usageRecords'].add(payload)]" doc:name="Expression"/>
+                </foreach>
+                <logger message="After loadAriaDownloadOnly both Upload and Hosted Transforms #[message.payloadAs(java.lang.String)]" level="DEBUG" doc:name="Logger" category="com.merrillcorp.q2c"/>
+
+            </when>
+            <when expression="#[(ariaResponse.projectPhase == ${aria.projectPhase.Active}) &amp;&amp; (flowVars.ariaResponse.activeDate == sessionVars.comparePeriodStart)]">
+                <dw:transform-message doc:name="activeDate = usageDate Special Media Transform">
+                	<dw:set-payload resource="classpath:dataweave/prepareSOAPPayloadForSpecialMediaUploadOnly.dwl"/>
+                </dw:transform-message>
+                <foreach collection="payload" doc:name="For Each">
+                    <expression-transformer expression="#[sessionVars['usageRecords'].add(payload)]" doc:name="Expression"/>
+                </foreach>
+
+                <logger message="After loadAriaDownloadOnly Special Media Upload Only Choice #[message.payloadAs(java.lang.String)]" level="DEBUG" doc:name="Logger" category="com.merrillcorp.q2c"/>
+
+            </when>
+            <when expression="#[ariaResponse.projectPhase == ${aria.projectPhase.Suspended}]">
+                <dw:transform-message doc:name="Special Media Suspended State Transform">
+               <dw:set-payload resource="classpath:dataweave/prepareSOAPPayloadForSpecialMediaSuspended.dwl"/>
+                    
+                </dw:transform-message>
+                <foreach  doc:name="For Each">
+                    <expression-transformer expression="#[sessionVars['usageRecords'].add(payload)]" doc:name="Expression"/>
+                </foreach>
+                <logger message="After loadAriaDownloadOnly Special Media Suspended State Choice #[message.payloadAs(java.lang.String)]" level="DEBUG" category="com.merrillcorp.q2c" doc:name="Logger"/>
+            </when>
+
+            <otherwise>
+                <dw:transform-message doc:name="Special Media Hosted Only Transform">
+                    <dw:set-payload resource="classpath:dataweave/prepareSOAPPayloadForSpecialMediaHostedOnly.dwl"/>
+                </dw:transform-message>
+                <foreach collection="payload" doc:name="For Each">
+                    <expression-transformer expression="#[sessionVars['usageRecords'].add(payload)]" doc:name="Expression"/>
+                </foreach>
+                <logger message="After loadAriaDownloadOnly Special Media Hosted Only Choice #[message.payloadAs(java.lang.String)]" level="DEBUG" category="com.merrillcorp.q2c" doc:name="Logger"/>
+
+            </otherwise>
+        </choice>
+    </flow>
+<flow name="loadAriaDocChoice" processingStrategy="synchronous">
+        
+                <choice doc:name="docProcessed Units Choice">
+                    <when expression="#[(ariaResponse.projectPhase == ${aria.projectPhase.Preparation})  || ((ariaResponse.projectPhase == ${aria.projectPhase.Active}) &amp;&amp; (flowVars.ariaResponse.activeDate &gt; sessionVars.comparePeriodStart))]">
+                        <dw:transform-message doc:name="Zero docProcessed Transform Message">
+                          <dw:set-payload resource="classpath:dataweave/ariaZeroDocProcessed.dwl"/>
+                        </dw:transform-message>
+                        
+                        <foreach doc:name="For Each" collection="payload">
+                           <expression-transformer expression="#[sessionVars['usageRecords'].add(payload)]" doc:name="Expression"/>
+                        </foreach>
+                        <logger message="After Zero docProcessed Transform Message Choice #[message.payloadAs(java.lang.String)]" level="DEBUG" doc:name="Logger" category="com.merrillcorp.q2c"/>
+                    </when>
+                    <when expression="#[(ariaResponse.projectPhase == ${aria.projectPhase.Active}) &amp;&amp; (flowVars.ariaResponse.activeDate == sessionVars.comparePeriodStart)]">
+                        <dw:transform-message doc:name="activeDate = usageDate docProcessedTransform Message">
+                          <dw:set-payload resource="classpath:dataweave/ariaDocProcessedActiveDate.dwl"/>
+                        </dw:transform-message>
+                        <foreach doc:name="For Each" collection="payload">
+                           <expression-transformer expression="#[sessionVars['usageRecords'].add(payload)]" doc:name="Expression"/>
+                        </foreach>
+                        <logger message="docProcessed activeDate = usageDate Transform Message Choice #[message.payloadAs(java.lang.String)]" level="DEBUG" doc:name="Logger" category="com.merrillcorp.q2c"/>
+                    </when>
+            <when expression="#[ariaResponse.projectPhase == ${aria.projectPhase.Suspended}]">
+                <dw:transform-message doc:name="Transform Message">
+                   <dw:set-payload resource="classpath:dataweave/prepareSOAPPayloaddocProcessedSuspended.dwl"/> 
+                    
+                </dw:transform-message>
+                <foreach collection="payload" doc:name="For Each">
+                    <expression-transformer expression="#[sessionVars['usageRecords'].add(payload)]" doc:name="Expression"/>
+                </foreach>
+                <logger message="docProcessed Transform Message Choice Suspended State #[message.payloadAs(java.lang.String)]" level="DEBUG" category="com.merrillcorp.q2c" doc:name="Logger"/>
+            </when>
+                    <otherwise>
+                        <dw:transform-message doc:name="docProcessed Transform Message">
+                          <dw:set-payload resource="classpath:dataweave/ariaNonZeroDocProcessed.dwl"/>
+                        </dw:transform-message>
+                <foreach doc:name="For Each" collection="payload">
+                    <expression-transformer expression="#[sessionVars['usageRecords'].add(payload)]" doc:name="Expression"/>
+                </foreach>
+                <logger message="After NonZero docProcessed Transform Message Choice #[message.payloadAs(java.lang.String)]" level="DEBUG" doc:name="Logger" category="com.merrillcorp.q2c"/>
+                    </otherwise>
+                </choice>
+
+    </flow>    
+<flow name="callBulkUsageg2" processingStrategy="synchronous">
+ 
+        <logger level="INFO" doc:name="Logger"/>
+        <set-session-variable variableName="bulkCall" value="#[payload]" doc:name="Session Variable" mimeType="application/xml"/>
+        <until-successful maxRetries="${aria.http.max.retries}" failureExpression="exception!=null &amp;&amp; (exception.causedBy(java.io.IOException) || exception.causedBy(java.net.ConnectException)  || exception.causedBy(java.net.SocketTimeoutException))" synchronous="true" doc:name="Until Successful" millisBetweenRetries="${aria.http.milliSecondsBetweenRetries}">
+            <http:request config-ref="ariaSystemRequestConfiguration" path="${aria.path}" method="POST" doc:name="Aria Load Usage API">
+                <http:request-builder>
+                    <http:header headerName="SOAPAction" value="${aria.usage.api}"/>
+                </http:request-builder>
+            </http:request>
+        </until-successful>
+        <set-variable variableName="ariaUsageResponse" value="#[payload]" mimeType="application/java" doc:name="Set ariaUsageResponse"/>
+        <dw:transform-message doc:name="Transform Message">
+            <dw:set-variable variableName="usageErrorMsg"><![CDATA[%dw 1.0
+%output application/java
+%namespace env http://schemas.xmlsoap.org/soap/envelope/
+%namespace aria urn:client:api:wsdl:document/literal_wrapped:vers:11.0:aria_complete_m_api
+%var responseElement = payload.env#Envelope.env#Body.aria#bulk_record_usage_mResponseElement
+---
+{
+  errorMsg: responseElement.error_msg
+}]]></dw:set-variable>
+            <dw:set-session-variable variableName="usageResponse"><![CDATA[%dw 1.0
+%output application/xml
+---
+payload]]></dw:set-session-variable>
+        </dw:transform-message>
+        <choice doc:name="Choice">
+            <when expression="#[flowVars.usageErrorMsg.errorMsg == &quot;OK&quot;]">
+                <set-session-variable variableName="pollNewlyActiveProjects" value="#[true]" doc:name="Session Variable"/>
+                <logger message="Bulk Usage Loaded with no errors.   Response=#[flowVars.ariaUsageResponse.toString()]" level="INFO" category="com.merrillcorp.q2c" doc:name="Report Sucessful Load"/>
+            </when>
+            <otherwise>
+                <logger message="ERROR:  Bulk Usage Load has errors.  Usage Message=#[flowVars.payloadBeforeUsageCall.toString()]  Response=#[flowVars.ariaUsageResponse.toString()]" level="ERROR" category="com.merrillcorp.q2c" doc:name="Logger"/>
+                <dw:transform-message doc:name="Transform Message">
+                    <dw:set-payload><![CDATA[%dw 1.0
+%output application/xml
+%namespace soap http://schemas.xmlsoap.org/soap/envelope/
+%namespace aria urn:client:api:wsdl:document/literal_wrapped:vers:11.0:aria_complete_m_api
+%var bulkRequest = sessionVars.bulkCall.Envelope.Body.bulk_record_usage_m
+%var ariaResponse = sessionVars.usageResponse.Envelope.Body.bulk_record_usage_mResponseElement.*error_records.out_client_record_id
+%function urr2(i)(bulkRequest.usage_recs.*usage_recs_row filter $.client_record_id == ariaResponse[i])
+%function urr3()(ariaResponse map ((t, i) -> {(urr2(i))}))
+---
+{
+    soap#Envelope: {
+        soap#Header: { },
+        soap#Body: {
+            aria#bulk_record_usage_m: {
+                client_no: p('aria.client_no'),
+                    auth_key: p('aria.auth_key'),
+                        usage_recs: {
+                            (urr3() map {usage_recs_row: $
+                        }
+                    )
+                }
+            }
+        }
+    }
+}]]></dw:set-payload>
+                </dw:transform-message>
+                <objectstore:store config-ref="Reprocess_Strategy" key="#[]" value-ref="#[payload]" doc:name="ObjectStore"/>
+
+            </otherwise>
+        </choice>
+
+        <logger message="End of flow callBulkUsage" level="DEBUG" doc:name="Logger" category="com.merrillcorp.q2c"/>
+    </flow>
+    <flow name="getAriaData" processingStrategy="synchronous">
+        <dw:transform-message doc:name="Transform Message">
+             
+            <dw:set-payload resource="classpath:dataweave/ariaGetAccountPlans.dwl"/>
+        </dw:transform-message>
+        <logger message="After Transforms in getAriaData #[message.payloadAs(java.lang.String)]" level="DEBUG" doc:name="Logger" category="com.merrillcorp.q2c"/>
+        <object-to-string-transformer doc:name="Object to String"/>
+
+          <until-successful maxRetries="${aria.http.max.retries}" failureExpression="exception!=null &amp;&amp; (exception.causedBy(java.io.IOException) || exception.causedBy(java.net.ConnectException)  || exception.causedBy(java.net.SocketTimeoutException))" synchronous="true" doc:name="Until Successful" millisBetweenRetries="${aria.http.milliSecondsBetweenRetries}">
+            <http:request config-ref="ariaSystemRequestConfiguration" path="${aria.path}" method="POST" doc:name="Get Aria Plans Information">
+                <http:request-builder>
+                    <http:header headerName="SOAPAction" value="&quot;get_acct_plans_all_m&quot;"/>
+
+                </http:request-builder>
+            </http:request>
+        </until-successful>
+
+        <dw:transform-message doc:name="Search Aria API Response for Ids">
+           <dw:set-variable variableName="ariaResponse" resource="classpath:dataweave/ariaDocProcessed.dwl"/>
+        </dw:transform-message>
+        <logger message="End of flow getAriaData #[message.payloadAs(java.lang.String)] and flowVar ariaResponse has ---&gt; #[flowVars.ariaResponse]" level="DEBUG" doc:name="Logger" category="com.merrillcorp.q2c"/>
+    </flow>
+
+</mule>

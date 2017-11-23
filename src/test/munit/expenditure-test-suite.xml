@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+        xmlns:mock="http://www.mulesoft.org/schema/mule/mock"
+	xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:spring="http://www.springframework.org/schema/beans"
+      xmlns:core="http://www.mulesoft.org/schema/mule/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xsi:schemaLocation="http://www.mulesoft.org/schema/mule/mock http://www.mulesoft.org/schema/mule/mock/current/mule-mock.xsd
+http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd
+http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+
+    <munit:config mock-connectors="false" mock-inbounds="false" name="munit" doc:name="MUnit configuration"/>
+
+    <spring:beans>
+        <spring:import resource="classpath:expenditure.xml"/>
+        <spring:import resource="classpath:globals.xml"/>
+    </spring:beans>
+   
+    <munit:test name="test-getExpenditureId" description="test-expOrgMap">
+
+        <mock:when messageProcessor="http:request" doc:name="mockExpOrgExpenditureItemsFromOracle">
+            <mock:then-return payload="#[getResource('expOrgExpenditureItems.json').asString()]" mimeType="application/json"/>
+        </mock:when>
+
+        <munit:set payload="#[['businessUnit':'TESTING','serviceSite':'ABC','teamType':'TESTING']]" doc:name="Set Message" mimeType="application/java"/>
+
+        <flow-ref name="getExpenditureId" doc:name="getExpenditureId"/>
+
+        <munit:assert-on-equals expectedValue="#[1234]" actualValue="#[payload.expenditureId]" doc:name="Assert Equals"/>
+    </munit:test>
+    
+</mule>
